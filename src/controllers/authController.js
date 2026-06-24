@@ -7,10 +7,10 @@ const REFRESH_COOKIE_NAME = 'refreshToken';
 
 const refreshCookieOptions = () => ({
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', 
+  secure: true, 
+  sameSite: 'none', 
+  path: '/', 
   expires: refreshTokenExpiryDate(),
-  path: '/api/auth',
 });
 
 export const register = async (req, res) => {

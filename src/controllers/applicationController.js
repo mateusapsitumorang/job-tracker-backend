@@ -197,12 +197,10 @@ export const getDashboardSummary = async (req, res) => {
   try {
     const userId = req.userId;
 
-    // 1. Buat batas waktu: 7 hari yang lalu dari hari ini
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    // 2. Tambahkan pencarian data 7 hari terakhir di Promise.all
     const [total, byStatus, upcomingInterviews, recentApps] = await Promise.all([
       prisma.application.count({ where: { userId } }),
       prisma.application.groupBy({
@@ -215,7 +213,6 @@ export const getDashboardSummary = async (req, res) => {
         orderBy: { interviewDate: 'asc' },
         take: 5,
       }),
-      // Query baru untuk chart
       prisma.application.findMany({
         where: {
           userId,
@@ -231,22 +228,19 @@ export const getDashboardSummary = async (req, res) => {
 
     const successRate = total > 0 ? Math.round(((offers + accepted) / total) * 100) : 0;
 
-    // 3. Olah data chart (7 hari terakhir)
     const daysMap = { 0: 'M', 1: 'Sn', 2: 'Sl', 3: 'R', 4: 'K', 5: 'J', 6: 'S' };
     const weeklyRaw = [];
 
-    // Inisialisasi struktur array 7 hari ke belakang agar urutannya selalu benar
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       weeklyRaw.push({
         day: daysMap[d.getDay()],
         value: 0,
-        dateString: d.toDateString() // Format string sementara untuk pencocokan
+        dateString: d.toDateString()
       });
     }
 
-    // Tambahkan jumlah (value) berdasarkan tanggal pembuatan lamaran
     recentApps.forEach(app => {
       const appDateString = new Date(app.createdAt).toDateString();
       const dayIndex = weeklyRaw.findIndex(w => w.dateString === appDateString);
@@ -255,7 +249,6 @@ export const getDashboardSummary = async (req, res) => {
       }
     });
 
-    // Buang properti dateString karena frontend hanya butuh day & value
     const weekly = weeklyRaw.map(item => ({ day: item.day, value: item.value }));
 
     return res.json({
@@ -264,7 +257,7 @@ export const getDashboardSummary = async (req, res) => {
       successRate,
       rejected,
       upcomingInterviews,
-      weekly, // Data asli sekarang dikirim ke frontend!
+      weekly, 
     });
   } catch (err) {
     console.error(err);
