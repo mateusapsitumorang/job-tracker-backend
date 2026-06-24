@@ -5,6 +5,7 @@ import {
   getApplications,
   getApplicationById,
   updateApplication,
+  patchApplication,  
   deleteApplication,
   getDashboardSummary,
 } from '../controllers/applicationController.js';
@@ -33,6 +34,8 @@ router.post(
 router.get('/:id', getApplicationById);
 
 router.put('/:id', updateApplication);
+
+router.patch('/:id', patchApplication);
 
 router.delete('/:id', deleteApplication);
 

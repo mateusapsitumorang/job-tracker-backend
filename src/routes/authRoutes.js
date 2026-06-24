@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { register, login, refresh, logout, me } from '../controllers/authController.js';
+import { register, login, refresh, logout, me, forgotPassword, resetPassword } from '../controllers/authController.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
+
 
 const router = Router();
 
@@ -30,5 +31,22 @@ router.post(
 router.post('/refresh', refresh);
 router.post('/logout', logout);
 router.get('/me', requireAuth, me);
+
+router.post(
+  '/forgot-password',
+  [body('email').isEmail().withMessage('Email tidak valid.')],
+  validate,
+  forgotPassword
+);
+
+router.post(
+  '/reset-password',
+  [
+    body('token').notEmpty(),
+    body('password').isLength({ min: 8 }).withMessage('Minimal 8 karakter.'),
+  ],
+  validate,
+  resetPassword
+);
 
 export default router;

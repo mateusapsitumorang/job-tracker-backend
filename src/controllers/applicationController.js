@@ -31,7 +31,17 @@ export const createApplication = async (req, res) => {
 
 export const getApplications = async (req, res) => {
   try {
-    const { status, search, sortBy = 'createdAt', order = 'desc', page = 1, pageSize = 20 } = req.query;
+    const { 
+      status, 
+      search, 
+      sortBy, sort_by,
+      sortDir, sort_dir, order: orderParam, 
+      limit, pageSize: pageSizeParam,
+      page: pageParam 
+    } = req.query;
+
+    const sortField = sortBy || sort_by || 'createdAt';
+    const sortDirection = sortDir || sort_dir || orderParam || 'desc';
 
     const where = {
       userId: req.userId,
@@ -46,22 +56,29 @@ export const getApplications = async (req, res) => {
         : {}),
     };
 
-    const take = Math.min(parseInt(pageSize, 10) || 20, 100);
-    const skip = (Math.max(parseInt(page, 10) || 1, 1) - 1) * take;
+    const pageSizeFromLimit = limit ? parseInt(limit, 10) : null;
+    const pageSizeFromParam = pageSizeParam ? parseInt(pageSizeParam, 10) : null;
+    const take = pageSizeFromLimit || pageSizeFromParam || 20;
+    const finalTake = Math.min(take, 1000); // 🔧 Max 1000
+    
+    const page = Math.max(parseInt(pageParam, 10) || 1, 1);
+    const skip = (page - 1) * finalTake;
+
+    console.log('📊 QUERY PARAMS:', { sortField, sortDirection, finalTake, page, skip });
 
     const [items, total] = await Promise.all([
       prisma.application.findMany({
         where,
-        orderBy: { [sortBy]: order === 'asc' ? 'asc' : 'desc' },
-        take,
+        orderBy: { [sortField]: sortDirection === 'asc' ? 'asc' : 'desc' },
+        take: finalTake,
         skip,
       }),
       prisma.application.count({ where }),
     ]);
 
-    return res.json({ items, total, page: Number(page), pageSize: take });
+    return res.json({ items, total, page, pageSize: finalTake });
   } catch (err) {
-    console.error(err);
+    console.error('❌ Error getApplications:', err);
     return res.status(500).json({ message: 'Gagal mengambil data lamaran.' });
   }
 };
@@ -122,6 +139,41 @@ export const updateApplication = async (req, res) => {
   }
 };
 
+export const patchApplication = async (req, res) => {
+  try {
+    const existing = await prisma.application.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ message: 'Lamaran tidak ditemukan.' });
+    }
+
+    const { status, appliedDate, interviewDate, notes, source } = req.body;
+
+    const updateData = {};
+    if (status !== undefined) updateData.status = status;
+    if (appliedDate !== undefined) updateData.appliedDate = appliedDate ? new Date(appliedDate) : null;
+    if (interviewDate !== undefined) updateData.interviewDate = interviewDate ? new Date(interviewDate) : null;
+    if (notes !== undefined) updateData.notes = notes;
+    if (source !== undefined) updateData.source = source;
+
+    const application = await prisma.application.update({
+      where: { id: req.params.id },
+      data: updateData,
+    });
+
+    if (status && status !== existing.status) {
+      await addLog(application.id, 'STATUS_CHANGED', `Status diubah dari ${existing.status} ke ${status}`);
+    }
+
+    return res.json({ application });
+  } catch (err) {
+    console.error('❌ Error patchApplication:', err);
+    return res.status(500).json({ message: 'Gagal memperbarui status lamaran.' });
+  }
+};
+
 export const deleteApplication = async (req, res) => {
   try {
     const existing = await prisma.application.findFirst({
@@ -145,7 +197,13 @@ export const getDashboardSummary = async (req, res) => {
   try {
     const userId = req.userId;
 
-    const [total, byStatus, upcomingInterviews] = await Promise.all([
+    // 1. Buat batas waktu: 7 hari yang lalu dari hari ini
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    // 2. Tambahkan pencarian data 7 hari terakhir di Promise.all
+    const [total, byStatus, upcomingInterviews, recentApps] = await Promise.all([
       prisma.application.count({ where: { userId } }),
       prisma.application.groupBy({
         by: ['status'],
@@ -157,6 +215,14 @@ export const getDashboardSummary = async (req, res) => {
         orderBy: { interviewDate: 'asc' },
         take: 5,
       }),
+      // Query baru untuk chart
+      prisma.application.findMany({
+        where: {
+          userId,
+          createdAt: { gte: sevenDaysAgo }
+        },
+        select: { createdAt: true }
+      })
     ]);
 
     const offers = byStatus.find((s) => s.status === 'OFFER')?._count._all || 0;
@@ -165,12 +231,40 @@ export const getDashboardSummary = async (req, res) => {
 
     const successRate = total > 0 ? Math.round(((offers + accepted) / total) * 100) : 0;
 
+    // 3. Olah data chart (7 hari terakhir)
+    const daysMap = { 0: 'M', 1: 'Sn', 2: 'Sl', 3: 'R', 4: 'K', 5: 'J', 6: 'S' };
+    const weeklyRaw = [];
+
+    // Inisialisasi struktur array 7 hari ke belakang agar urutannya selalu benar
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      weeklyRaw.push({
+        day: daysMap[d.getDay()],
+        value: 0,
+        dateString: d.toDateString() // Format string sementara untuk pencocokan
+      });
+    }
+
+    // Tambahkan jumlah (value) berdasarkan tanggal pembuatan lamaran
+    recentApps.forEach(app => {
+      const appDateString = new Date(app.createdAt).toDateString();
+      const dayIndex = weeklyRaw.findIndex(w => w.dateString === appDateString);
+      if (dayIndex !== -1) {
+        weeklyRaw[dayIndex].value += 1;
+      }
+    });
+
+    // Buang properti dateString karena frontend hanya butuh day & value
+    const weekly = weeklyRaw.map(item => ({ day: item.day, value: item.value }));
+
     return res.json({
       total,
       byStatus,
       successRate,
       rejected,
       upcomingInterviews,
+      weekly, // Data asli sekarang dikirim ke frontend!
     });
   } catch (err) {
     console.error(err);
