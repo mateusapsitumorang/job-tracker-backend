@@ -1,4 +1,4 @@
-# Job Tracker — Backend
+# Job Tracker - Backend
 
 REST API untuk aplikasi pelacak lamaran kerja (job application tracker). Dibangun dengan Express.js dan Prisma ORM di atas PostgreSQL, dengan autentikasi berbasis JWT (access + refresh token).
 
@@ -57,10 +57,10 @@ job-tracker-backend/
 
 ## Model Data (Prisma)
 
-- **User** — akun pengguna, menyimpan `passwordHash`, relasi ke `applications` dan `refreshTokens`, serta field reset password.
-- **RefreshToken** — token refresh yang tersimpan di DB untuk mendukung revoke/rotasi.
-- **Application** — data lamaran kerja: `companyName`, `position`, `status` (enum), `appliedDate`, `interviewDate`, `notes`, `source`.
-- **ActivityLog** — riwayat aktivitas/perubahan pada sebuah `Application`.
+- **User** - akun pengguna, menyimpan `passwordHash`, relasi ke `applications` dan `refreshTokens`, serta field reset password.
+- **RefreshToken** - token refresh yang tersimpan di DB untuk mendukung revoke/rotasi.
+- **Application** - data lamaran kerja: `companyName`, `position`, `status` (enum), `appliedDate`, `interviewDate`, `notes`, `source`.
+- **ActivityLog** - riwayat aktivitas/perubahan pada sebuah `Application`.
 
 Status lamaran (`ApplicationStatus`) mendukung: `WISHLIST`, `APPLIED`, `WAITING_REVIEW`, `ASSESSMENT`, `INTERVIEW_HR`, `INTERVIEW_USER`, `INTERVIEW_FINAL`, `OFFER`, `REJECTED`, `ACCEPTED`, `WITHDRAWN`.
 
